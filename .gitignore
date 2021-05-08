@@ -1,0 +1,3 @@
+#ignore ide files
+*.idea/*
+*.ipynb_checkpoints*
