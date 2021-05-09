@@ -23,16 +23,19 @@ class EntryflowConv(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels=in_channel,out_channels=32,kernel_size=3,stride=2)
         self.conv2 = nn.Conv2d(in_channels=32,out_channels=out_channel,kernel_size=3)
-
+        self.bnm1 = nn.BatchNorm2d(32)
+        self.bnm2 = nn.BatchNorm2d(out_channel)
         self.relu = nn.ReLU()
 
     def forward(self,x):
         # 299x299x3
         x = self.conv1(x)
+        x = self.bnm1(x)
         x = self.relu(x)
         # 149x149x32
 
         x = self.conv2(x)
+        x = self.bnm2(x)
         x = self.relu(x)
         # 147x147x64
 
@@ -103,26 +106,31 @@ class EntryflowSeparable(nn.Module):
 
         # 1st branch
         self.sepconv1 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
+        self.bnm1 = nn.BatchNorm2d(out_channel)
         self.sepconv2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.bnm2 = nn.BatchNorm2d(out_channel)
         self.maxpool = nn.MaxPool2d(kernel_size=3,stride=2,padding=pool_padding)
         self.relu = nn.ReLU()
         self.relu_extra = relu_extra
 
         # 2nd branch (left)
         self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=2)
+        self.bnmy = nn.BatchNorm2d(out_channel)
 
     def forward(self,x):
         # 2nd branch
         y = self.conv(x)
+        y = self.bnmy(y)
 
         # 1st branch
         if self.relu_extra:
             x = self.relu(x)
         x = self.sepconv1(x)
+        x = self.bnm1(x)
         x = self.relu(x)
 
         x = self.sepconv2(x)
-
+        x = self.bnm2(x)
         x = self.maxpool(x)
 
         # Add two branch
@@ -158,15 +166,23 @@ class EntryFlow(nn.Module):
     def __init__(self):
         super(EntryFlow,self).__init__()
         self.conv = EntryflowConv(in_channel=3,out_channel=64)
+        self.bnm_conv = nn.BatchNorm2d(64)
         self.sep1 = EntryflowSeparable(in_channel=64,out_channel=128)
+        self.bnm1 = nn.BatchNorm2d(128)
         self.sep2 = EntryflowSeparable(in_channel=128,out_channel=256,relu_extra=True)
+        self.bnm2 = nn.BatchNorm2d(256)
         self.sep3 = EntryflowSeparable(in_channel=256,out_channel=728,relu_extra=True)
+        self.bnm3 = nn.BatchNorm2d(728)
 
     def forward(self,x):
         x = self.conv(x)
+        x = self.bnm_conv(x)
         x = self.sep1(x)
+        x = self.bnm1(x)
         x = self.sep2(x)
+        x = self.bnm2(x)
         x = self.sep3(x)
+        x = self.bnm3(x)
 
         return x
 
@@ -195,6 +211,7 @@ class MiddleflowSeperable(nn.Module):
         self.sep1 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
         self.sep2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
         self.sep3 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.bnm = nn.BatchNorm2d(out_channel)
         self.relu = nn.ReLU()
 
     def forward(self,x):
@@ -204,12 +221,15 @@ class MiddleflowSeperable(nn.Module):
         # 1st branch
         x = self.relu(x)
         x = self.sep1(x)
+        x = self.bnm(x)
 
         x = self.relu(x)
         x = self.sep2(x)
+        x = self.bnm(x)
 
         x = self.relu(x)
         x = self.sep3(x)
+        x = self.bnm(x)
 
         # Add two branch
         x = x + y
@@ -231,15 +251,16 @@ class MiddleFlow(nn.Module):
     This is the Middle Flow part -
         MiddleFlowSeperable is repeated 8 times 
     
-    input_size = (19,19,728)
-    output_size = (19,19,728)       
+    input_size = (728,19,19)
+    output_size = (728,19,19)       
     """
     def __init__(self):
         super(MiddleFlow,self).__init__()
         self.sep = MiddleflowSeperable(in_channel=728,out_channel=728)
+        self.bnm = nn.BatchNorm2d(728)
     def forward(self,x):
         for i in range(8):
-            x = self.sep(x)
+            x = self.bnm(self.sep(x))
         return x
 
 
@@ -272,17 +293,23 @@ class ExitflowSeperable(nn.Module):
         
         #2nd branch
         self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=2)
+        
+        self.bnm1 = nn.BatchNorm2d(in_channel)
+        self.bnm2 = nn.BatchNorm2d(out_channel)
 
     def forward(self,x):
 
         #2nd branch 
         y = self.conv(x)
+        y = self.bnm2(y)
 
         #1st branch
         x = self.relu(x)
         x = self.sep1(x)
+        x = self.bnm1(x)
         x = self.relu(x)
         x = self.sep2(x)
+        x = self.bnm2(x)
         x = self.pool(x)
 
         return x+y    
@@ -302,14 +329,16 @@ class ExitFlow(nn.Module):
     """
     This part contains ExitFlowSeperable part with 2 different depthwise seperable convolutions followed by Global Avgerage Pool(Avg Pool of kernel size 10) and connecting with output layer
 
-    input_size  :(19,19,728)
+    input_size  :(728,19,19)
     output_size :(output_layer)
     """
     def __init__(self,in_channel=728,out_channel=1024,first_layer=1536,second_layer=2048,output_layer=1000):
         super(ExitFlow,self).__init__()
         self.block = ExitflowSeperable(in_channel=in_channel,out_channel=out_channel)
         self.sep1 = DepthwiseSeparable(in_channel=1024,out_channel=first_layer,kernel_size=3)
+        self.bnm1 = nn.BatchNorm2d(first_layer)
         self.sep2 = DepthwiseSeparable(in_channel=first_layer,out_channel=second_layer,kernel_size=3)
+        self.bnm2 = nn.BatchNorm2d(second_layer)
         self.relu = nn.ReLU()
         self.pool = nn.AvgPool2d(kernel_size=10)
         self.flatten = nn.Flatten()
@@ -318,8 +347,10 @@ class ExitFlow(nn.Module):
     def forward(self,x):
         x = self.block(x)
         x = self.sep1(x)
+        x = self.bnm1(x)
         x = self.relu(x)
         x = self.sep2(x)
+        x = self.bnm2(x)
         x = self.relu(x)
         x = self.pool(x)
         x = self.flatten(x)
