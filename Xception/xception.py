@@ -177,3 +177,188 @@ class EntryFlow(nn.Module):
 xception_entry = EntryFlow()
 summary(xception_entry,input_size=(3,299,299))
 
+
+# In[11]:
+
+
+class MiddleflowSeperable(nn.Module):
+    """
+    This part contains depthwise separable convolutions and is repeated 3 times in original implementation.
+
+        in_channel, out_channel : Both of them are actually equal!
+        kernel_size = 3 : For all repetitions
+    """
+    def __init__(self,in_channel,out_channel):
+        super(MiddleflowSeperable,self).__init__()
+
+        # 1st branch
+        self.sepconv1 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
+        self.sepconv2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.sepconv3 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.relu = nn.ReLU()
+
+        # 2nd branch
+        self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=1)
+
+    def forward(self,x):
+        # 2nd branch
+        y = self.conv(x)
+
+        # 1st branch
+        x = self.relu(x)
+        x = self.sepconv1(x)
+
+        x = self.relu(x)
+        x = self.sepconv2(x)
+
+        x = self.relu(x)
+        x = self.sepconv3(x)
+
+        # Add two branch
+        x = x + y
+        return x
+
+
+# In[12]:
+
+
+model = MiddleflowSeperable(in_channel=728,out_channel=728)
+summary(model=model,input_size=(728,19,19))
+
+
+# In[13]:
+
+
+class MiddleFlow(nn.Module):
+    """
+    This is the Middle Flow part -
+        MiddleFlowSeperable is repeated 8 times 
+    
+    input_size = (19,19,728)
+    output_size = (19,19,728)       
+    """
+    def __init__(self):
+        super(MiddleFlow,self).__init__()
+        self.sep = MiddleflowSeperable(in_channel=728,out_channel=728)
+    def forward(self,x):
+        for i in range(0,8):
+            x = self.sep(x)
+        return x
+
+
+# In[14]:
+
+
+sample = MiddleFlow()
+summary(model=sample,input_size=(728,19,19))
+
+
+# In[15]:
+
+
+class ExitflowSeperable(nn.Module):
+    """
+    This part contains depthwise separable convolutions and is repeated 2 times in original implementation with max pool layer.
+
+        in_channel, out_channel : Both of them are different
+        kernel_size = 3 : For all repetitions
+        max pool kernel_size :3 with stride:2
+    """
+    def __init__(self,in_channel,out_channel,padding=1):
+        super(ExitflowSeperable,self).__init__()
+
+        #1st branch
+        self.sep1 = DepthwiseSeparable(in_channel=in_channel,out_channel=in_channel,kernel_size=3)
+        self.sep2 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
+        self.relu = nn.ReLU()
+        self.pool = nn.MaxPool2d(kernel_size=3,stride=2,padding=padding)
+        
+        #2nd branch
+        self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=2)
+
+    def forward(self,x):
+
+        #2nd branch 
+        y = self.conv(x)
+
+        #1st branch
+        x = self.relu(x)
+        x = self.sep1(x)
+        x = self.relu(x)
+        x = self.sep2(x)
+        x = self.pool(x)
+
+        return x+y    
+
+
+# In[16]:
+
+
+sample = ExitflowSeperable(in_channel=728,out_channel=1024)
+summary(model=sample,input_size=(728,19,19))
+
+
+# In[17]:
+
+
+class ExitFlow(nn.Module):
+    """
+    This part contains ExitFlowSeperable part with 2 different depthwise seperable convolutions followed by Global Avgerage Pool(Avg Pool of kernel size 10) and connecting with output layer
+
+    input_size  :(19,19,728)
+    output_size :(output_layer)
+    """
+    def __init__(self,in_channel=728,out_channel=1024,first_layer=1536,second_layer=2048,output_layer=1000):
+        super(ExitFlow,self).__init__()
+        self.block = ExitflowSeperable(in_channel=in_channel,out_channel=out_channel)
+        self.sep1 = DepthwiseSeparable(in_channel=1024,out_channel=first_layer,kernel_size=3)
+        self.sep2 = DepthwiseSeparable(in_channel=first_layer,out_channel=second_layer,kernel_size=3)
+        self.relu = nn.ReLU()
+        self.pool = nn.AvgPool2d(kernel_size=10)
+        self.flatten = nn.Flatten()
+        self.output = nn.Linear(in_features=second_layer,out_features=output_layer)
+
+    def forward(self,x):
+        x = self.block(x)
+        x = self.sep1(x)
+        x = self.relu(x)
+        x = self.sep2(x)
+        x = self.relu(x)
+        x = self.pool(x)
+        x = self.flatten(x)
+        x = self.output(x)
+        return x
+
+
+# In[18]:
+
+
+sample = ExitFlow()
+summary(model=sample,input_size=(728,19,19))
+
+
+# In[19]:
+
+
+class Xception(nn.Module):
+    """
+        Now, this is the final part where we merge all the flow i.e. entry, middle and exit flow to get the Xception Model
+    """
+    def __init__(self):
+        super(Xception,self).__init__()
+        self.entry = EntryFlow()
+        self.mid = MiddleFlow()
+        self.exit = ExitFlow()
+    def forward(self,x):
+        x = self.entry(x)
+        x = self.mid(x)
+        x = self.exit(x)
+        return x
+
+
+# In[20]:
+
+
+xception = Xception()
+summary(model=xception,input_size=(3,299,299))
+
