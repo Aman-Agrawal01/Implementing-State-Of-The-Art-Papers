@@ -192,27 +192,24 @@ class MiddleflowSeperable(nn.Module):
         super(MiddleflowSeperable,self).__init__()
 
         # 1st branch
-        self.sepconv1 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
-        self.sepconv2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
-        self.sepconv3 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.sep1 = DepthwiseSeparable(in_channel=in_channel,out_channel=out_channel,kernel_size=3)
+        self.sep2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
+        self.sep3 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
         self.relu = nn.ReLU()
-
-        # 2nd branch
-        self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=1)
 
     def forward(self,x):
         # 2nd branch
-        y = self.conv(x)
+        y = x
 
         # 1st branch
         x = self.relu(x)
-        x = self.sepconv1(x)
+        x = self.sep1(x)
 
         x = self.relu(x)
-        x = self.sepconv2(x)
+        x = self.sep2(x)
 
         x = self.relu(x)
-        x = self.sepconv3(x)
+        x = self.sep3(x)
 
         # Add two branch
         x = x + y
@@ -241,7 +238,7 @@ class MiddleFlow(nn.Module):
         super(MiddleFlow,self).__init__()
         self.sep = MiddleflowSeperable(in_channel=728,out_channel=728)
     def forward(self,x):
-        for i in range(0,8):
+        for i in range(8):
             x = self.sep(x)
         return x
 
