@@ -8,7 +8,7 @@ import torch.nn as nn
 from torchsummary import summary
 
 
-# In[17]:
+# In[2]:
 
 
 class EntryflowConv(nn.Module):
@@ -46,7 +46,7 @@ sample = EntryflowConv(in_channel=3,out_channel=64)
 summary(sample,input_size=(3,299,299))
 
 
-# In[8]:
+# In[4]:
 
 
 class DepthwiseSeparable(nn.Module):
@@ -78,7 +78,7 @@ class DepthwiseSeparable(nn.Module):
         return x
 
 
-# In[9]:
+# In[5]:
 
 
 # Padding = 1 ('same') in all such layers
@@ -86,7 +86,7 @@ sample = DepthwiseSeparable(in_channel=64,out_channel=128,kernel_size=3)
 summary(sample,input_size=(64,147,147))
 
 
-# In[13]:
+# In[6]:
 
 
 class EntryflowSeparable(nn.Module):
@@ -96,8 +96,9 @@ class EntryflowSeparable(nn.Module):
         in_channel, out_channel : Different for each repetition
         pool_padding: default :1 , Padding value for max_pool layer
         kernel_size = 3 : For all repetitions
+        relu_extra : bool, default : false : Whether or not put a relu layer in the beginning
     """
-    def __init__(self,in_channel,out_channel,pool_padding=1):
+    def __init__(self,in_channel,out_channel,pool_padding=1,relu_extra=False):
         super(EntryflowSeparable,self).__init__()
 
         # 1st branch
@@ -105,6 +106,7 @@ class EntryflowSeparable(nn.Module):
         self.sepconv2 = DepthwiseSeparable(in_channel=out_channel,out_channel=out_channel,kernel_size=3)
         self.maxpool = nn.MaxPool2d(kernel_size=3,stride=2,padding=pool_padding)
         self.relu = nn.ReLU()
+        self.relu_extra = relu_extra
 
         # 2nd branch (left)
         self.conv = nn.Conv2d(in_channels=in_channel,out_channels=out_channel,kernel_size=1,stride=2)
@@ -114,6 +116,8 @@ class EntryflowSeparable(nn.Module):
         y = self.conv(x)
 
         # 1st branch
+        if self.relu_extra:
+            x = self.relu(x)
         x = self.sepconv1(x)
         x = self.relu(x)
 
@@ -126,14 +130,21 @@ class EntryflowSeparable(nn.Module):
         return x
 
 
-# In[14]:
+# In[7]:
 
 
 sample = EntryflowSeparable(in_channel=64,out_channel=128)
 summary(sample,input_size=(64,147,147))
 
 
-# In[18]:
+# In[8]:
+
+
+sample = EntryflowSeparable(in_channel=128,out_channel=256,relu_extra=True)
+summary(sample,input_size=(128,74,74))
+
+
+# In[9]:
 
 
 class EntryFlow(nn.Module):
@@ -148,8 +159,8 @@ class EntryFlow(nn.Module):
         super(EntryFlow,self).__init__()
         self.conv = EntryflowConv(in_channel=3,out_channel=64)
         self.sep1 = EntryflowSeparable(in_channel=64,out_channel=128)
-        self.sep2 = EntryflowSeparable(in_channel=128,out_channel=256)
-        self.sep3 = EntryflowSeparable(in_channel=256,out_channel=728)
+        self.sep2 = EntryflowSeparable(in_channel=128,out_channel=256,relu_extra=True)
+        self.sep3 = EntryflowSeparable(in_channel=256,out_channel=728,relu_extra=True)
 
     def forward(self,x):
         x = self.conv(x)
@@ -160,15 +171,9 @@ class EntryFlow(nn.Module):
         return x
 
 
-# In[19]:
+# In[10]:
 
 
 xception_entry = EntryFlow()
 summary(xception_entry,input_size=(3,299,299))
-
-
-# In[ ]:
-
-
-
 
