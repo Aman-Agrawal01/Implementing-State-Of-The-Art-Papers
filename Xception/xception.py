@@ -166,23 +166,15 @@ class EntryFlow(nn.Module):
     def __init__(self):
         super(EntryFlow,self).__init__()
         self.conv = EntryflowConv(in_channel=3,out_channel=64)
-        self.bnm_conv = nn.BatchNorm2d(64)
         self.sep1 = EntryflowSeparable(in_channel=64,out_channel=128)
-        self.bnm1 = nn.BatchNorm2d(128)
         self.sep2 = EntryflowSeparable(in_channel=128,out_channel=256,relu_extra=True)
-        self.bnm2 = nn.BatchNorm2d(256)
         self.sep3 = EntryflowSeparable(in_channel=256,out_channel=728,relu_extra=True)
-        self.bnm3 = nn.BatchNorm2d(728)
 
     def forward(self,x):
         x = self.conv(x)
-        x = self.bnm_conv(x)
         x = self.sep1(x)
-        x = self.bnm1(x)
         x = self.sep2(x)
-        x = self.bnm2(x)
         x = self.sep3(x)
-        x = self.bnm3(x)
 
         return x
 
@@ -257,10 +249,9 @@ class MiddleFlow(nn.Module):
     def __init__(self):
         super(MiddleFlow,self).__init__()
         self.sep = MiddleflowSeperable(in_channel=728,out_channel=728)
-        self.bnm = nn.BatchNorm2d(728)
     def forward(self,x):
         for i in range(8):
-            x = self.bnm(self.sep(x))
+            x = self.sep(x)
         return x
 
 
